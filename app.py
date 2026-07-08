@@ -12,6 +12,15 @@ CATEGORY_COLORS = {
     "개인": "#1f9d6b",
     "공부": "#a15be0",
 }
+CATEGORY_KEYWORDS = {
+    "업무": ["회의", "미팅", "보고서", "발표", "프로젝트", "업무", "회사", "클라이언트",
+             "이메일", "메일", "출장", "계약", "결재", "기획", "마감", "리포트", "회식"],
+    "개인": ["병원", "약속", "가족", "쇼핑", "운동", "여행", "생일", "청소", "빨래",
+             "은행", "친구", "약국", "예약", "장보기", "취미", "산책"],
+    "공부": ["공부", "시험", "과제", "강의", "수업", "독서", "책", "논문", "복습",
+             "예습", "학원", "자격증", "스터디", "숙제", "토익", "코딩"],
+}
+AUTO_OPTION = "자동 분류"
 
 st.set_page_config(page_title="할 일 관리", page_icon="✅", layout="centered")
 
@@ -100,6 +109,16 @@ def toggle_done(todo_id, done):
     save_todos(st.session_state.todos)
 
 
+def classify_category(text):
+    scores = {cat: 0 for cat in CATEGORIES}
+    for cat, keywords in CATEGORY_KEYWORDS.items():
+        for kw in keywords:
+            if kw in text:
+                scores[cat] += 1
+    best_cat = max(CATEGORIES, key=lambda c: scores[c])
+    return best_cat if scores[best_cat] > 0 else None
+
+
 def category_badge(category, extra_style=""):
     color = CATEGORY_COLORS[category]
     return (
@@ -132,20 +151,39 @@ for col, category in zip(cat_cols, CATEGORIES):
 st.divider()
 
 with st.form("add_form", clear_on_submit=True):
-    input_col, cat_col, btn_col = st.columns([3, 1, 1])
+    input_col, cat_col, btn_col = st.columns([3, 1.3, 1])
     with input_col:
         new_text = st.text_input(
             "할 일", placeholder="할 일을 입력하세요", label_visibility="collapsed"
         )
     with cat_col:
-        new_category = st.selectbox(
-            "카테고리", CATEGORIES, index=1, label_visibility="collapsed"
+        new_category_choice = st.selectbox(
+            "카테고리",
+            [AUTO_OPTION] + CATEGORIES,
+            index=0,
+            label_visibility="collapsed",
+            help="자동 분류를 선택하면 입력한 문장의 키워드를 분석해 업무/개인/공부 중 하나로 정합니다.",
         )
     with btn_col:
         submitted = st.form_submit_button("추가", use_container_width=True)
 
-    if submitted and not add_todo(new_text, new_category):
-        st.warning("할 일 내용을 입력해주세요.")
+    if submitted:
+        if not new_text.strip():
+            st.warning("할 일 내용을 입력해주세요.")
+        elif new_category_choice == AUTO_OPTION:
+            detected = classify_category(new_text)
+            final_category = detected or "개인"
+            add_todo(new_text, final_category)
+            if detected:
+                st.toast(f"'{final_category}' 카테고리로 자동 분류했습니다.", icon="🏷️")
+            else:
+                st.toast("일치하는 키워드가 없어 기본값 '개인'으로 분류했습니다.", icon="ℹ️")
+        else:
+            add_todo(new_text, new_category_choice)
+
+with st.expander("자동 분류 키워드 보기"):
+    for cat in CATEGORIES:
+        st.caption(f"**{cat}**: {', '.join(CATEGORY_KEYWORDS[cat])}")
 
 filter_choice = st.radio(
     "필터", ["전체"] + CATEGORIES, horizontal=True, label_visibility="collapsed"
